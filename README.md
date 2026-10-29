@@ -1,6 +1,12 @@
 # Quadrupole Lab — RF/DC & Mathieu Simulator
 
-A small independent, static website for the physics of an ideal linear quadrupole mass filter. No server, dependencies, build tooling, telemetry, or API keys. Open `index.html` directly or deploy the folder to GitHub Pages.
+Hi there :)
+
+This is a personal project dedicated to understanding mass spectrometers, in particular quadrupoles and ion traps.
+
+This website allows physics calculations of an ideal linear quadrupole mass filter. No server, dependencies, build tooling, telemetry, or API keys. Open `index.html` directly or deploy the folder to GitHub Pages.
+
+I will updating and editing this over time. Feel free to have a browse.
 
 **Features**
 
