@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Open-source RF/DC voltage calculator, Mathieu stability diagram, and RK4 ion-trajectory simulator for ideal quadrupole mass filters.">
+  <title>Quadrupole Lab — RF/DC & Mathieu Simulator</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="quad-math.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="masthead">
+      <div class="brand"><span class="brand-mark">Q<span>∣</span></span><div><strong>QUADRUPOLE LAB</strong><small>OPEN-SOURCE INSTRUMENT DESIGN TOOLS</small></div></div>
+      <div class="header-side"><span class="version">v0.1 · ideal-field model</span><a href="https://github.com/new" target="_blank" rel="noopener">Publish on GitHub <span aria-hidden="true">↗</span></a></div>
+    </header>
+    <main>
+      <div class="intro"><p class="eyebrow">Mass analyser engineering / numerical modelling</p><h1>Quadrupole <em>RF / DC</em> calculator</h1><p>Explore operating voltages, calculate Mathieu stability boundaries using RK4 integration, and simulate finite-length ion trajectories. Entirely local JavaScript, with no server or dependencies.</p></div>
+      <div class="workspace">
+        <aside class="sidebar panel">
+          <div class="section-header"><span class="section-num">01</span><div><h2>Operating conditions</h2><p>Define your mass filter</p></div></div>
+          <form id="settings" novalidate>
+            <div class="field"><label for="mz">Target m/z <span>Th (Da/e)</span></label><input id="mz" type="number" min="0.01" max="100000" step="any" value="200" required></div>
+            <div class="field"><label for="radius">Field radius r₀ <span>mm</span></label><input id="radius" type="number" min="0.01" max="100" step="any" value="4" required></div>
+            <div class="field"><label for="frequency">RF frequency f <span>MHz</span></label><input id="frequency" type="number" min="0.001" max="100" step="any" value="1" required></div>
+            <div class="hairline"></div>
+            <div class="field"><label for="mode">Operating-point method</label><select id="mode"><option value="width">Desired ideal passband</option><option value="manual">Specify Mathieu a and q</option></select></div>
+            <div id="widthFields" class="field"><label for="width">Target ideal Δ(m/z) <span>Th</span></label><input id="width" type="number" min="0.00001" max="10000" step="any" value="1"></div>
+            <div id="manualFields" class="nested-fields hidden"><div class="field"><label for="manualA">Mathieu a</label><input id="manualA" type="number" min="0" max="1" step="any" value="0.2357"></div><div class="field"><label for="manualQ">Mathieu q</label><input id="manualQ" type="number" min="0" max="2" step="any" value="0.7048"></div></div>
+            <label class="checkline"><input type="checkbox" id="rfOnly"><span><strong>RF-only ion-guide mode</strong><small>Sets U = 0; no narrow mass-isolation window</small></span></label>
+            <div class="field hidden" id="guideQField"><label for="guideQ">RF-only Mathieu q</label><input id="guideQ" type="number" min="0.001" max="0.9" step="any" value="0.30"></div>
+            <button class="primary" type="submit">Calculate operating point <span aria-hidden="true">→</span></button>
+            <p id="error" class="error" role="alert" aria-live="polite"></p>
+          </form>
+          <div class="side-note"><strong>Voltage convention</strong><p>Opposite rod pairs are at ±[U + V·cos(Ωt)] relative to ground. RF results are <b>zero-to-peak per rod pair</b>, not differential across both pairs.</p></div>
+        </aside>
+        <div class="content">
+          <section class="panel outputs">
+            <div class="section-header"><span class="section-num">02</span><div><h2>Calculated operating point</h2><p>Peak voltages · dimensionless stability parameters</p></div><span class="status" id="status">Computing</span></div>
+            <div class="metrics">
+              <div class="metric feature"><span class="metric-label">RF amplitude V <small>0-to-peak, per rod</small></span><strong id="vRf">—</strong><span class="metric-unit">V</span></div>
+              <div class="metric feature"><span class="metric-label">DC voltage U <small>per rod</small></span><strong id="vDc">—</strong><span class="metric-unit">V</span></div>
+              <div class="metric"><span class="metric-label">RF per rod</span><strong id="vPp">—</strong><small>V peak-to-peak</small></div>
+              <div class="metric"><span class="metric-label">Differential RF</span><strong id="vDiff">—</strong><small>V peak-to-peak, between rod pairs</small></div>
+              <div class="metric"><span class="metric-label">Mathieu q</span><strong id="outQ">—</strong><small>dimensionless</small></div>
+              <div class="metric"><span class="metric-label">Mathieu a</span><strong id="outA">—</strong><small>dimensionless</small></div>
+              <div class="metric"><span class="metric-label">Operating a/q</span><strong id="outSlope">—</strong><small>scan-line slope</small></div>
+              <div class="metric"><span class="metric-label">Ideal passband Δ(m/z)</span><strong id="outBand">—</strong><small id="outBandNote">Th · infinitely long ideal filter</small></div>
+            </div>
+          </section>
+          <section class="panel plot-panel">
+            <div class="section-header"><span class="section-num">03</span><div><h2>Mathieu stability — region I</h2><p>Floquet monodromy boundaries solved by fourth-order Runge–Kutta</p></div></div>
+            <div class="legend"><span><i class="swatch mint"></i> Stable region</span><span><i class="swatch amber"></i> Scan line</span><span><i class="swatch white"></i> Selected m/z</span></div>
+            <canvas id="stabilityPlot" role="img" aria-label="Mathieu stability region: q on x-axis, a on y-axis, scan line and operating point"></canvas>
+            <div class="plot-caption"><span id="apexNote">First apex: calculating…</span><span id="regionNote">Region I / ideal quadrupole</span></div>
+          </section>
+          <section class="panel plot-panel">
+            <div class="section-header"><span class="section-num">04</span><div><h2>Ion trajectory · finite length</h2><p>RK4 integration through an ideal, uniform quadrupole field</p></div></div>
+            <form id="trajectorySettings" class="trajectory-fields">
+              <div class="field"><label for="testMz">Test m/z <span>Th</span></label><input type="number" id="testMz" min="0.01" step="any" value="200"></div>
+              <div class="field"><label for="length">Quad length <span>mm</span></label><input type="number" id="length" min="0.1" step="any" value="80"></div>
+              <div class="field"><label for="energy">Axial energy <span>eV / charge</span></label><input type="number" id="energy" min="0.001" step="any" value="5"></div>
+              <div class="field"><label for="phase">Entrance RF phase <span>°</span></label><input type="number" id="phase" step="any" value="0"></div>
+              <div class="field"><label for="x0">Initial x <span>mm</span></label><input type="number" id="x0" step="any" value="0.12"></div>
+              <div class="field"><label for="y0">Initial y <span>mm</span></label><input type="number" id="y0" step="any" value="0.12"></div>
+              <div class="field"><label for="vx0">Initial vx <span>m/s</span></label><input type="number" id="vx0" step="any" value="0"></div>
+              <div class="field"><label for="vy0">Initial vy <span>m/s</span></label><input type="number" id="vy0" step="any" value="0"></div>
+              <button type="submit" class="secondary">Simulate trajectory ↗</button>
+            </form>
+            <div class="inline-readout"><span id="transmissionResult">—</span><span id="cycleResult">—</span></div>
+            <div class="legend"><span><i class="swatch cyan"></i> x(z)</span><span><i class="swatch rose"></i> y(z)</span><span><i class="swatch muted"></i> ±r₀</span></div>
+            <canvas id="trajectoryPlot" role="img" aria-label="Ion displacement in x and y versus axial z position"></canvas>
+            <p class="footnote">This plots one ion at one RF entry phase. A bounded Mathieu solution does not guarantee transmission through a finite rod set; neither does a single transmitted ion imply high instrument transmission efficiency.</p>
+          </section>
+          <section class="panel plot-panel">
+            <div class="section-header"><span class="section-num">05</span><div><h2>RF/DC mass scan</h2><p>Voltages to preserve the selected a/q operating point as m/z changes</p></div><button id="downloadCsv" class="small-button" type="button">Export CSV ↓</button></div>
+            <div class="scan-inputs"><div class="field"><label for="scanStart">Start <span>Th</span></label><input type="number" id="scanStart" min="0.01" value="50" step="any"></div><div class="field"><label for="scanEnd">End <span>Th</span></label><input type="number" id="scanEnd" min="0.01" value="500" step="any"></div><button id="updateScan" class="secondary" type="button">Update scan</button></div>
+            <div class="legend"><span><i class="swatch cyan"></i> RF (V peak)</span><span><i class="swatch amber"></i> DC (V)</span></div>
+            <canvas id="scanPlot" role="img" aria-label="RF and DC rod-pair voltages versus target mass-to-charge"></canvas>
+            <p class="footnote">A fixed-slope scan maintains approximately constant resolving power in the ideal Mathieu model, not fixed unit-mass width. Real instruments require calibration and RF/DC offset correction.</p>
+          </section>
+        </div>
+      </div>
+      <section class="reference panel"><div class="section-header"><span class="section-num">06</span><div><h2>Model & limitations</h2><p>Equations, assumptions, reproducibility</p></div></div>
+        <div class="references-grid"><div><h3>Electric potential and Mathieu parameters</h3><p>Φ(x,y,t) = [U + V·cos(Ωt)](x² − y²)/r₀², Ω = 2πf.</p><p>a = 8eU / [(m/z)u ·r₀²Ω²], q = 4eV / [(m/z)u ·r₀²Ω²].</p><p>Canonical Mathieu equation: u″ + [a − 2q·cos(2τ)]u = 0, where τ = Ωt/2. The opposite RF sign is a 180° phase shift and does not change the stability boundary.</p></div>
+          <div><h3>Numerical classification</h3><p>RK4 integrates two independent solutions through one Mathieu period. The resulting 2×2 monodromy matrix identifies bounded solutions from |trace(M)| &lt; 2 in both transverse axes. The narrowest Region I operating point is approximately (q, a) = (0.705996, 0.236994).</p><p>There is no pressure, collisions, fringe field, rod manufacturing error, electrical loading, space charge, or detector response in this model.</p></div></div>
+        <div class="citations"><strong>Further reading:</strong> J. J. Tunstall, A. C. C. Voo & S. Taylor, <i>Rapid Communications in Mass Spectrometry</i> 11, 184–188 (1997), <a target="_blank" rel="noopener" href="https://doi.org/10.1002/(SICI)1097-0231(19970131)11:2%3C184::AID-RCM724%3E3.0.CO;2-P">DOI</a>. B. Douglas, G. R. Giraud & R. J. Keennay, <i>Simulation and Manufacture of a Quadrupole Mass Filter</i>, <a target="_blank" rel="noopener" href="https://marvin.byu.edu/beryllium7/publications/KellenGiraudSeniorThesis2008.pdf">thesis</a>. <a href="README.md">Implementation notes</a>.</div>
+      </section>
+    </main>
+    <footer>Quadrupole Lab · Physics-first, open-source tools · Not a certified hardware-design or high-voltage safety calculator.</footer>
+  </div>
+</body>
+</html>
